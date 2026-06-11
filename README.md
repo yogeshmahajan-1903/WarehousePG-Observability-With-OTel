@@ -50,7 +50,7 @@ cd warehouse-pg-observability-otelcollector
 Run the following **on each WHPG node** as `gpadmin`. No repo clone needed — curl the script directly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/otelcol-container.sh \
+curl -fsSL https://raw.githubusercontent.com/yogeshmahajan-1903/WarehousePG-Observability-With-OTel/refs/heads/main/otelcol-container.sh \
     -o ~/otelcol-container.sh
 chmod +x ~/otelcol-container.sh
 ```

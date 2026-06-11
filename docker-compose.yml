@@ -21,7 +21,7 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
     networks:
       - observability

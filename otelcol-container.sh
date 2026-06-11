@@ -12,7 +12,7 @@ OTELCOL_VERSION="0.153.0"
 OTELCOL_ARCHIVE="otelcol-contrib_${OTELCOL_VERSION}_linux_amd64.tar.gz"
 OTELCOL_DOWNLOAD_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${OTELCOL_ARCHIVE}"
 # Set this to the raw GitHub URL of otel-collector-whpg-node.yaml in your fork
-OTELCOL_CONFIG_URL="https://raw.githubusercontent.com/OWNER/REPO/main/otel-collector-whpg-node.yaml"
+OTELCOL_CONFIG_URL="https://raw.githubusercontent.com/yogeshmahajan-1903/WarehousePG-Observability-With-OTel/refs/heads/main/otel-collector-whpg-node.yaml"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -38,8 +38,8 @@ deploy() {
     # ── Validate WHPG connection first ────────────────────────────────────────
     info "Step 0 — Validate WHPG connection"
 
-    read -p "  WHPG host [host.docker.internal]: " _host
-    WHPG_HOST="${_host:-host.docker.internal}"
+    read -p "  WHPG host [localhost]: " _host
+    WHPG_HOST="${_host:-localhost}"
 
     read -p "  WHPG port [5432]: " _port
     WHPG_PORT="${_port:-5432}"
@@ -103,11 +103,22 @@ deploy() {
     CLICKHOUSE_ENDPOINT="tcp://${CH_HOST}:${CH_TCP_PORT}?dial_timeout=10s"
 
     info "Connecting to ClickHouse at ${CH_HOST}:${CH_HTTP_PORT} as ${CH_USERNAME} ..."
-    CH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-        "http://${CH_HOST}:${CH_HTTP_PORT}/?user=${CH_USERNAME}&password=${CLICKHOUSE_PASSWORD}&query=SELECT+1")
+    CH_RESPONSE=$(curl -s -w "\n%{http_code}" \
+        -u "${CH_USERNAME}:${CLICKHOUSE_PASSWORD}" \
+        "http://${CH_HOST}:${CH_HTTP_PORT}/?query=SELECT+1")
+    CH_STATUS=$(echo "$CH_RESPONSE" | tail -1)
+    CH_BODY=$(echo "$CH_RESPONSE" | head -1)
+
     if [ "$CH_STATUS" != "200" ]; then
         err "Cannot connect to ClickHouse at ${CH_HOST}:${CH_HTTP_PORT} (HTTP ${CH_STATUS:-unreachable})."
-        err "Check host, port, credentials, and that ClickHouse HTTP interface is up."
+        [ -n "$CH_BODY" ] && err "ClickHouse response: ${CH_BODY}"
+        echo ""
+        case "$CH_STATUS" in
+            401) echo -e "  ${YELLOW}Hint: Wrong password. Check CLICKHOUSE_PASSWORD in the observability host .env file.${NC}"
+                 echo -e "  ${YELLOW}      If ClickHouse was started with a different password, run: ./manage.sh clean && ./manage.sh start${NC}" ;;
+            000) echo -e "  ${YELLOW}Hint: Host unreachable. Verify ClickHouse is running and ${CH_HOST}:${CH_HTTP_PORT} is reachable from this node.${NC}" ;;
+            *)   echo -e "  ${YELLOW}Hint: Check ClickHouse logs on the observability host: ./manage.sh logs clickhouse${NC}" ;;
+        esac
         exit 1
     fi
     ok "ClickHouse connection OK"
@@ -181,7 +192,13 @@ EOF
     ok "${ENV_FILE} written"
 
     echo ""
-    ok "Deployment complete. Run: $0 start"
+    ok "Deployment complete. FOllow the next steps to start the collector and verify it's running:"
+    echo ""
+    echo -e "  ${YELLOW}Next steps:${NC}"
+    echo -e "    Start collector :  $0 start"
+    echo -e "    Collector log   :  ${LOGFILE}"
+    echo -e "    Tail log        :  tail -f ${LOGFILE}"
+    echo -e "    Health check    :  $0 status"
 }
 
 load_env() {

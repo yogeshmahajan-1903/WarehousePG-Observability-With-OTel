@@ -128,10 +128,29 @@ function clean_volumes() {
     print_header "Cleaning volumes"
     print_error "WARNING: This will delete all data!"
     read -p "Are you sure? (yes/no): " response
-    
+
     if [ "$response" = "yes" ]; then
         docker-compose down -v
         print_success "Volumes cleaned"
+    else
+        print_info "Operation cancelled"
+    fi
+}
+
+function clean_all() {
+    print_header "Full Clean — containers, images, volumes, networks"
+    print_error "WARNING: This will destroy ALL stack data and remove Docker images!"
+    print_error "You will need to run './manage.sh start' to rebuild from scratch."
+    read -p "Type 'yes' to confirm: " response
+
+    if [ "$response" = "yes" ]; then
+        print_info "Stopping and removing containers, volumes, and networks ..."
+        docker-compose down -v --remove-orphans
+
+        print_info "Removing images used by this stack ..."
+        docker-compose images -q | xargs -r docker rmi -f
+
+        print_success "Full clean complete — stack is completely removed"
     else
         print_info "Operation cancelled"
     fi
@@ -168,6 +187,7 @@ Commands:
     severity-stats      Show log count by severity
     cpu-metrics         Show CPU and memory metrics
     clean-volumes       Delete all data volumes (DESTRUCTIVE)
+    clean               Remove containers, volumes, networks, and images (DESTRUCTIVE)
     help                Show this help message
 
 Examples:
@@ -218,6 +238,9 @@ case "${1:-help}" in
         ;;
     clean-volumes)
         clean_volumes
+        ;;
+    clean)
+        clean_all
         ;;
     help)
         show_help
