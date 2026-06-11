@@ -1,0 +1,207 @@
+# ============================================================
+# OpenTelemetry Collector — standalone config for WHPG cluster nodes
+#
+# Install:  otelcol-contrib (https://github.com/open-telemetry/opentelemetry-collector-releases)
+# Run:      otelcol-contrib --config /etc/otelcol/otel-collector-whpg-node.yaml
+#
+# Backend: ClickHouse (clickhouse/clickhouse-server)
+#
+# Required env vars (set in /etc/otelcol/otelcol.env):
+#   CLICKHOUSE_ENDPOINT    e.g. tcp://192.168.1.10:9000?dial_timeout=10s
+#   CLICKHOUSE_PASSWORD    password for the ClickHouse default user
+#   WHPG_HOST              hostname of the WHPG server, e.g. localhost
+#   WHPG_PORT              port of the WHPG server, e.g. 5432
+#   WHPG_DB                database to connect to, e.g. postgres
+#   WHPG_ENDPOINT          assembled host:port (set by deploy from WHPG_HOST:WHPG_PORT)
+#   WHPG_USERNAME          WHPG user with pg_monitor role
+#   WHPG_PASSWORD          password for WHPG_USERNAME
+#   PG_LOG_DIR             path to pg_log directory, e.g. /whpgdata/master/whpgsne-1/pg_log
+# ============================================================
+
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol/file_storage
+
+  health_check:
+    endpoint: :13133
+
+  pprof:
+    endpoint: :1777
+
+# ── Receivers ────────────────────────────────────────────────
+receivers:
+  filelog:
+    include:
+      - ${env:PG_LOG_DIR}/*.csv
+      - ${env:PG_LOG_DIR}/*.log
+    start_at: beginning
+    storage: file_storage
+
+    resource:
+      hostname: ${env:HOSTNAME}
+
+    attributes:
+      job: coordinator_${env:HOSTNAME}
+
+    multiline:
+      line_start_pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.'
+
+    operators:
+      # Drop lines that do not begin with a WHPG timestamp
+      - type: filter
+        expr: 'body not matches "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\."'
+
+      # Parse the 30-field WHPG CSV
+      - type: csv_parser
+        parse_from: body
+        header: log_time,log_user,log_database,log_pid,thread_id,connection_from,session_id,session_start,vxid,txid,command_tag,log_segment,slice_id,dtx_id,local_txid,subtxid,log_severity,sql_state,log_message,detail,hint,internal_query,internal_query_pos,context,log_query,query_pos,location,file_name,file_line,stack_trace
+
+      # Map WHPG severity levels to OTel SeverityNumber
+      - type: severity_parser
+        parse_from: attributes.log_severity
+        mapping:
+          debug: [DEBUG1, DEBUG2, DEBUG3, DEBUG4, DEBUG5]
+          info:  [INFO, LOG, NOTICE]
+          warn:  WARNING
+          error: [ERROR, FATAL]
+          fatal: PANIC
+
+      # Use the WHPG log timestamp as the record time
+      - type: time_parser
+        parse_from: attributes.log_time
+        layout: '%Y-%m-%d %H:%M:%S.%L %Z'
+
+      # Rename fields to canonical attribute names
+      - type: move
+        from: attributes.log_database
+        to:   attributes.database
+
+      - type: move
+        from: attributes.log_severity
+        to:   attributes.severity
+
+      - type: move
+        from: attributes.log_message
+        to:   attributes.message
+
+  postgresql:
+    endpoint: ${env:WHPG_ENDPOINT}
+    transport: tcp
+    username: ${env:WHPG_USERNAME}
+    password: ${env:WHPG_PASSWORD}
+    # Leave databases empty to collect metrics for all databases.
+    databases: []
+    collection_interval: 60s
+    tls:
+      insecure: true
+
+  sqlquery/whpg_segments:
+    driver: postgres
+    datasource: "host=${env:WHPG_HOST} port=${env:WHPG_PORT} user=${env:WHPG_USERNAME} password=${env:WHPG_PASSWORD} dbname=${env:WHPG_DB} sslmode=disable"
+    collection_interval: 60s
+    queries:
+      - sql: "${file:/etc/otelcol/sql/whpg_segments.sql}"
+        metrics:
+          - metric_name: whpg.segment.up
+            value_column: is_up
+            attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
+            data_type: gauge
+            description: "1 if the segment is up (status=u), 0 if down (status=d)"
+            unit: "{status}"
+          - metric_name: whpg.segment.in_sync
+            value_column: is_in_sync
+            attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
+            data_type: gauge
+            description: "1 if the segment is in sync mode (mode=s), 0 otherwise (n=not-in-sync, r=resync, c=change-tracking)"
+            unit: "{mode}"
+          - metric_name: whpg.segment.is_primary
+            value_column: is_primary
+            attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
+            data_type: gauge
+            description: "1 if the segment is currently acting as primary (role=p), 0 if mirror (role=m)"
+            unit: "{role}"
+
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+      load:
+      memory:
+      disk:
+      filesystem:
+      network:
+      processes:
+      system:
+
+
+# ── Processors ───────────────────────────────────────────────
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  batch:
+    send_batch_size: 100
+    timeout: 10s
+
+  resource:
+    attributes:
+      - key: service.name
+        value: whpg-coordinator
+        action: upsert
+      - key: host.name
+        from_attribute: hostname
+        action: upsert
+
+# ── Exporters ────────────────────────────────────────────────
+exporters:
+  clickhouse/logs:
+    endpoint: ${env:CLICKHOUSE_ENDPOINT}
+    database: otel
+    username: default
+    password: ${env:CLICKHOUSE_PASSWORD}
+    create_schema: true
+    logs_table_name: otel_logs
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  clickhouse/metrics:
+    endpoint: ${env:CLICKHOUSE_ENDPOINT}
+    database: otel
+    username: default
+    password: ${env:CLICKHOUSE_PASSWORD}
+    create_schema: true
+    metrics_table_name: otel_metrics
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  #Expose metrics as a Prometheus scrape endpoint
+  prometheus:
+    endpoint: "0.0.0.0:9187"
+    namespace: whpg
+
+  # Set verbosity: basic in production
+  debug:
+    verbosity: normal
+
+# ── Service ──────────────────────────────────────────────────
+service:
+  extensions: [health_check, pprof, file_storage]
+
+  pipelines:
+    logs:
+      receivers:  [filelog]
+      processors: [memory_limiter, batch, resource]
+      exporters:  [clickhouse/logs, debug]
+
+    metrics:
+      receivers:  [hostmetrics, postgresql, sqlquery/whpg_segments]
+      processors: [memory_limiter, batch, resource]
+      exporters:  [clickhouse/metrics, prometheus, debug]
