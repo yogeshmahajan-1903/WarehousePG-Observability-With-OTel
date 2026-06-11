@@ -158,9 +158,14 @@ deploy() {
     #   → https://raw.githubusercontent.com/OWNER/REPO/main
     REPO_RAW_BASE="${OTELCOL_CONFIG_URL%/*}"
 
-    info "Step 3b — Fetching SQL files from GitHub (${REPO_RAW_BASE}/sql/)"
+    info "Step 3b — Fetching SQL/YAML query files from GitHub (${REPO_RAW_BASE}/sql/)"
+    # Add new query files here — both the .sql (query) and .yaml (metric definitions)
     SQL_FILES=(
         whpg_segments.sql
+        whpg_db_metrics.yaml
+        whpg_db_size.sql
+        whpg_query_states.sql
+        whpg_per_user_query_count.sql
     )
     for sql_file in "${SQL_FILES[@]}"; do
         sudo curl -fsSL "${REPO_RAW_BASE}/sql/${sql_file}" -o "/etc/otelcol/sql/${sql_file}"

@@ -99,27 +99,7 @@ receivers:
     driver: postgres
     datasource: "host=${env:WHPG_HOST} port=${env:WHPG_PORT} user=${env:WHPG_USERNAME} password=${env:WHPG_PASSWORD} dbname=${env:WHPG_DB} sslmode=disable"
     collection_interval: 60s
-    queries:
-      - sql: "${file:/etc/otelcol/sql/whpg_segments.sql}"
-        metrics:
-          - metric_name: whpg.segment.up
-            value_column: is_up
-            attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
-            data_type: gauge
-            description: "1 if the segment is up (status=u), 0 if down (status=d)"
-            unit: "{status}"
-          - metric_name: whpg.segment.in_sync
-            value_column: is_in_sync
-            attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
-            data_type: gauge
-            description: "1 if the segment is in sync mode (mode=s), 0 otherwise (n=not-in-sync, r=resync, c=change-tracking)"
-            unit: "{mode}"
-          - metric_name: whpg.segment.is_primary
-            value_column: is_primary
-            attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
-            data_type: gauge
-            description: "1 if the segment is currently acting as primary (role=p), 0 if mirror (role=m)"
-            unit: "{role}"
+    queries: ${file:/etc/otelcol/sql/whpg_db_metrics.yaml}
 
   hostmetrics:
     collection_interval: 60s

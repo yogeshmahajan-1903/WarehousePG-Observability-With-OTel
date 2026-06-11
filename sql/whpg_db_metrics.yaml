@@ -1,0 +1,91 @@
+- sql: "${file:/etc/otelcol/sql/whpg_segments.sql}"
+  metrics:
+    - metric_name: whpg.segment.up
+      value_column: is_up
+      attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
+      data_type: gauge
+      description: "1 if the segment is up (status=u), 0 if down (status=d)"
+      unit: "{status}"
+    - metric_name: whpg.segment.in_sync
+      value_column: is_in_sync
+      attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
+      data_type: gauge
+      description: "1 if the segment is in sync mode (mode=s), 0 otherwise (n=not-in-sync, r=resync, c=change-tracking)"
+      unit: "{mode}"
+    - metric_name: whpg.segment.is_primary
+      value_column: is_primary
+      attribute_columns: [content, role, preferred_role, mode, status, hostname, port, datadir]
+      data_type: gauge
+      description: "1 if the segment is currently acting as primary (role=p), 0 if mirror (role=m)"
+      unit: "{role}"
+
+- sql: "${file:/etc/otelcol/sql/whpg_db_size.sql}"
+  metrics:
+    - metric_name: whpg.db.size
+      value_column: sodddatsize
+      attribute_columns: [sodddatname]
+      data_type: gauge
+      description: "Total disk size of each WHPG database in bytes"
+      unit: "By"
+
+- sql: "${file:/etc/otelcol/sql/whpg_query_states.sql}"
+  metrics:
+    - metric_name: whpg.queries.total
+      value_column: total
+      data_type: gauge
+      description: "Total number of connections/queries in pg_stat_activity"
+      unit: "{query}"
+    - metric_name: whpg.queries.active
+      value_column: active_count
+      data_type: gauge
+      description: "Queries currently executing"
+      unit: "{query}"
+    - metric_name: whpg.queries.idle
+      value_column: idle_count
+      data_type: gauge
+      description: "Connections idle (no active query)"
+      unit: "{query}"
+    - metric_name: whpg.queries.idle_in_transaction
+      value_column: idle_in_transaction_count
+      data_type: gauge
+      description: "Connections idle inside an open transaction"
+      unit: "{query}"
+    - metric_name: whpg.queries.idle_in_transaction_aborted
+      value_column: idle_in_transaction_aborted_count
+      data_type: gauge
+      description: "Connections idle in an aborted transaction"
+      unit: "{query}"
+    - metric_name: whpg.queries.fastpath_function_call
+      value_column: fastpath_function_call_count
+      data_type: gauge
+      description: "Connections executing a fast-path function"
+      unit: "{query}"
+    - metric_name: whpg.queries.disabled
+      value_column: disabled_count
+      data_type: gauge
+      description: "Connections in disabled state"
+      unit: "{query}"
+    - metric_name: whpg.queries.blocked
+      value_column: count_blocked_query
+      data_type: gauge
+      description: "Queries waiting on a lock"
+      unit: "{query}"
+    - metric_name: whpg.queries.long_running_120s
+      value_column: count_long_run_query_120sec
+      data_type: gauge
+      description: "Active queries running longer than 120 seconds"
+      unit: "{query}"
+    - metric_name: whpg.queries.in_wait
+      value_column: count_query_in_wait
+      data_type: gauge
+      description: "Active queries waiting on a resource (waiting_reason IS NOT NULL)"
+      unit: "{query}"
+
+- sql: "${file:/etc/otelcol/sql/whpg_per_user_query_count.sql}"
+  metrics:
+    - metric_name: whpg.queries.per_user
+      value_column: count
+      attribute_columns: [usename]
+      data_type: gauge
+      description: "Number of connections/queries per user in pg_stat_activity"
+      unit: "{query}"
