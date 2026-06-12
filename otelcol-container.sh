@@ -50,7 +50,8 @@ deploy() {
     read -p "  WHPG username [gpadmin]: " _user
     WHPG_USERNAME="${_user:-gpadmin}"
 
-    read -s -p "  WHPG password: " WHPG_PASSWORD
+    read -s -p "  WHPG password [postgres]: " _password
+    WHPG_PASSWORD="${_password:-postgres}"
     echo ""
 
     # Assemble endpoint for the OTel postgresql receiver (host:port)

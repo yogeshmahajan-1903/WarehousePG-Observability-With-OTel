@@ -45,10 +45,10 @@ function check_prerequisites() {
     fi
     print_success "Docker Compose is installed"
 
-    if [ ! -f ".env" ]; then
-        print_info ".env file not found. Copying from .env.example"
-        cp .env.example .env
-        print_info "Please update .env with your configuration"
+    if [ -f ".env" ]; then
+        print_info "Using .env for ClickHouse password override"
+    else
+        print_info "No .env found — using default ClickHouse password (otelpassword)"
     fi
 }
 
